@@ -27,6 +27,10 @@ class IngredientsScreen(tk.Frame):
 
         self.refresh_list()
 
+    def on_show(self):
+        """Called by MainWindow each time this screen is switched to, so stock changed elsewhere (e.g. cooking a recipe) shows up here."""
+        self.refresh_list()
+
     # -- widgets -------------------------------------------------------
 
     def _build_form(self):

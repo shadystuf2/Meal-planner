@@ -81,6 +81,27 @@ class Database:
         cursor = self.connection.execute(query, params)
         return cursor.fetchall()
 
+    def execute_many_writes(self, statements: list) -> None:
+        """
+        Run several INSERT/UPDATE/DELETE statements as one atomic
+        transaction: `statements` is a list of (query, params) tuples,
+        each following the same "?" placeholder rule as execute_write.
+
+        Nothing is committed until every statement in the list has
+        run successfully - if any one of them raises an exception,
+        every change made so far in this call is rolled back instead
+        of being saved, so the database is never left half-updated.
+        This is what makes a multi-step change (like cooking a recipe,
+        which updates several ingredients at once) safe to interrupt.
+        """
+        try:
+            for query, params in statements:
+                self.connection.execute(query, params)
+            self.connection.commit()
+        except Exception:
+            self.connection.rollback()
+            raise
+
     def close(self):
         # Closes the connection to the database file. Call this when
         # the program is done using the database, so SQLite can

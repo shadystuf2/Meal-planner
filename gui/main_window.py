@@ -63,5 +63,15 @@ class MainWindow(tk.Tk):
 
     def show_screen(self, name):
         """Bring the named screen to the front, hiding the others."""
-        self.screens[name].tkraise()
+        screen = self.screens[name]
+        screen.tkraise()
         self.current_screen = name
+
+        # Data can change on one screen (e.g. cooking a recipe updates
+        # ingredient stock) and need to be reflected on another (the
+        # Ingredients list). Rather than every screen guessing when
+        # that might have happened, each one that cares defines an
+        # on_show() method, called here every time it's switched to.
+        on_show = getattr(screen, "on_show", None)
+        if on_show is not None:
+            on_show()

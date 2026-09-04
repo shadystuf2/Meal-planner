@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from logic import crud, search
+from logic import crud, search, matching
 from gui.validators import optional_positive_int, optional_non_negative_int
 
 
@@ -24,9 +24,21 @@ class FindRecipesScreen(tk.Frame):
 
         self._build_search_bar()
         self._build_filter_bar()
+        self._build_makeable_section()
         self._build_results()
 
         self.show_all()
+        self.refresh_makeable_list()
+
+    def on_show(self):
+        """
+        Called by MainWindow whenever this screen is switched to (see
+        show_screen in gui/main_window.py). Ingredient stock can
+        change on other screens (editing an ingredient's quantity) or
+        from cooking a recipe here, so recompute which recipes are
+        makeable each time the user comes back to this screen.
+        """
+        self.refresh_makeable_list()
 
     # -- widgets -------------------------------------------------------
 
@@ -71,6 +83,26 @@ class FindRecipesScreen(tk.Frame):
 
         tk.Button(bar, text="Apply filter", command=self.apply_filter).grid(row=0, column=8, padx=(20, 5))
         tk.Button(bar, text="Show all", command=self.show_all).grid(row=0, column=9, padx=5)
+
+    def _build_makeable_section(self):
+        section = tk.LabelFrame(self, text="Recipes you can make right now")
+        section.pack(side="bottom", fill="x", padx=10, pady=(5, 10))
+
+        # A Treeview can't hold a real Button in each row, so this
+        # list is a plain scrollable Frame (canvas + scrollbar) with
+        # one row Frame per makeable recipe, each row built fresh in
+        # refresh_makeable_list() with its own "Cook this" button.
+        canvas = tk.Canvas(section, height=110, highlightthickness=0)
+        scrollbar = tk.Scrollbar(section, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        self.makeable_rows_frame = tk.Frame(canvas)
+        canvas.create_window((0, 0), window=self.makeable_rows_frame, anchor="nw")
+        self.makeable_rows_frame.bind(
+            "<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
 
     def _build_results(self):
         results_frame = tk.Frame(self)
@@ -130,6 +162,64 @@ class FindRecipesScreen(tk.Frame):
 
         recipe = crud.get_recipe(recipe_id)
         self.instructions_label.config(text=recipe.instructions if recipe else "")
+
+    # -- makeable recipes / cooking ----------------------------------
+
+    def refresh_makeable_list(self):
+        """
+        Rebuild the "Recipes you can make right now" list: one row
+        per recipe whose ingredient stock is currently sufficient
+        (per logic.matching.get_makeable_recipes), each with its own
+        "Cook this" button.
+        """
+        for widget in self.makeable_rows_frame.winfo_children():
+            widget.destroy()
+
+        makeable_recipes = matching.get_makeable_recipes()
+
+        if not makeable_recipes:
+            tk.Label(self.makeable_rows_frame, text="(no recipes are fully stocked right now)").pack(
+                anchor="w", padx=5, pady=5
+            )
+            return
+
+        for recipe in makeable_recipes:
+            row = tk.Frame(self.makeable_rows_frame)
+            row.pack(fill="x", padx=5, pady=2)
+
+            label_text = f"{recipe.name}  ({recipe.meal_category}, {recipe.cooking_time_minutes} min)"
+            tk.Label(row, text=label_text, width=40, anchor="w").pack(side="left")
+
+            # `recipe_id=recipe.id` binds each button to *this* row's
+            # recipe id at creation time - without it every button in
+            # the loop would end up cooking whichever recipe was last.
+            tk.Button(
+                row, text="Cook this",
+                command=lambda recipe_id=recipe.id: self.cook_recipe(recipe_id),
+            ).pack(side="left", padx=5)
+
+    def cook_recipe(self, recipe_id):
+        """
+        Cook the given recipe via logic.matching.cook_recipe, which
+        updates all of its ingredients' stock in a single database
+        transaction, then refreshes this screen so the results,
+        makeable list, and any currently-shown ingredient/instruction
+        details all reflect the new stock.
+        """
+        recipe = crud.get_recipe(recipe_id)
+        if recipe is None:
+            return
+
+        try:
+            matching.cook_recipe(recipe_id)
+        except ValueError as error:
+            messagebox.showerror("Cannot cook recipe", str(error))
+            return
+
+        messagebox.showinfo("Recipe cooked", f'"{recipe.name}" cooked - ingredient stock updated.')
+
+        self.refresh_makeable_list()
+        self.show_all()
 
     # -- quick search actions -----------------------------------------
 

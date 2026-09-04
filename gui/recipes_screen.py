@@ -30,6 +30,11 @@ class RecipesScreen(tk.Frame):
         self.refresh_list()
         self.refresh_ingredient_choices()
 
+    def on_show(self):
+        """Called by MainWindow each time this screen is switched to, so ingredients added/removed elsewhere show up in the dropdown."""
+        self.refresh_list()
+        self.refresh_ingredient_choices()
+
     # -- widgets -------------------------------------------------------
 
     def _build_form(self):

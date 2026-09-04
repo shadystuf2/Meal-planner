@@ -3,60 +3,78 @@ from database.db import Database
 
 class Recipe:
     """
-    Will represent one row of the `recipes` table as a Python object,
-    the same way Ingredient (see models/ingredient.py) represents a
-    row of the `ingredients` table. Use that class as a reference -
-    save() and delete() here should follow the same pattern:
-      - open a Database()
-      - run one parameterised query (never f-string values into SQL)
-      - close the Database() when done
+    Represents one row of the `recipes` table as a Python object, the
+    same way Ingredient (see models/ingredient.py) represents a row
+    of the `ingredients` table.
 
-    recipes table columns (see database/schema.sql):
-      id                     INTEGER PRIMARY KEY
-      name                   TEXT
-      meal_category          TEXT
-      cooking_time_minutes   INTEGER
-      instructions           TEXT
+    Note: this class only covers the recipes table itself (id, name,
+    meal_category, cooking_time_minutes, instructions). The recipe's
+    ingredients live in the separate recipe_ingredients junction
+    table (many-to-many), so that's handled by the crud functions in
+    logic/crud.py rather than here.
     """
 
     def __init__(self, name, meal_category, cooking_time_minutes, instructions, id=None):
-        # TODO: store each parameter on self, one attribute per
-        # column above (id, name, meal_category, cooking_time_minutes,
-        # instructions) - same idea as Ingredient.__init__.
-        pass
+        self.id = id                                           # recipes.id
+        self.name = name                                       # recipes.name
+        self.meal_category = meal_category                     # recipes.meal_category
+        self.cooking_time_minutes = cooking_time_minutes        # recipes.cooking_time_minutes
+        self.instructions = instructions                        # recipes.instructions
 
     def save(self):
         """
-        TODO: write this recipe to the database.
+        Write this recipe's current attributes to the database.
 
-        Same two cases as Ingredient.save():
-          - self.id is None  -> INSERT a new row, then store the new
-            id SQLite generates back onto self.id
-          - self.id is set   -> UPDATE the existing row (WHERE id = ?)
-
-        Remember: use "?" placeholders in the query string and pass
-        the real values as a separate params tuple - never build the
-        SQL with f-strings/.format()/+.
+        Same insert-or-update pattern as Ingredient.save():
+        self.id is None -> INSERT and remember the new id;
+        self.id is set  -> UPDATE the existing row.
         """
-        pass
+        db = Database()
+
+        if self.id is None:
+            new_id = db.execute_write(
+                """
+                INSERT INTO recipes (name, meal_category, cooking_time_minutes, instructions)
+                VALUES (?, ?, ?, ?)
+                """,
+                (self.name, self.meal_category, self.cooking_time_minutes, self.instructions),
+            )
+            self.id = new_id
+        else:
+            db.execute_write(
+                """
+                UPDATE recipes
+                SET name = ?, meal_category = ?, cooking_time_minutes = ?, instructions = ?
+                WHERE id = ?
+                """,
+                (self.name, self.meal_category, self.cooking_time_minutes, self.instructions, self.id),
+            )
+
+        db.close()
 
     def delete(self):
         """
-        TODO: delete this recipe's row from the database.
+        Delete this recipe's row from the database.
 
-        Only do anything if self.id is set (nothing to delete
-        otherwise). Run a parameterised DELETE ... WHERE id = ?, then
-        set self.id back to None since this object no longer matches
-        a database row.
-
-        Note: recipe_ingredients rows referencing this recipe are
-        removed automatically by the ON DELETE CASCADE foreign key in
-        the schema, as long as the Database connection has
-        PRAGMA foreign_keys = ON (it does, see database/db.py).
+        recipe_ingredients rows referencing this recipe are removed
+        automatically by the ON DELETE CASCADE foreign key in the
+        schema, since Database connections run with
+        PRAGMA foreign_keys = ON (see database/db.py) - no need to
+        delete them here separately.
         """
-        pass
+        if self.id is None:
+            return
+
+        db = Database()
+        db.execute_write("DELETE FROM recipes WHERE id = ?", (self.id,))
+        db.close()
+
+        self.id = None
 
     def __repr__(self):
-        # TODO (optional): return a readable string like
-        # Ingredient.__repr__ does, useful for debugging/printing.
-        pass
+        return (
+            f"Recipe(id={self.id}, name={self.name!r}, "
+            f"meal_category={self.meal_category!r}, "
+            f"cooking_time_minutes={self.cooking_time_minutes}, "
+            f"instructions={self.instructions!r})"
+        )

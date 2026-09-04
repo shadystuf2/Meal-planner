@@ -41,3 +41,32 @@ def require_positive_int(value, field_name):
         raise ValueError(f"{field_name} must be greater than zero.")
 
     return number
+
+
+def require_non_negative_int(value, field_name):
+    """Parse value as a whole number and require it to be zero or more."""
+    try:
+        number = int(value)
+    except ValueError:
+        raise ValueError(f"{field_name} must be a whole number.")
+
+    if number < 0:
+        raise ValueError(f"{field_name} cannot be negative.")
+
+    return number
+
+
+def optional_positive_int(value, field_name):
+    """Like require_positive_int, but a blank value means "not set" (returns None)."""
+    value = value.strip()
+    if not value:
+        return None
+    return require_positive_int(value, field_name)
+
+
+def optional_non_negative_int(value, field_name):
+    """Like require_non_negative_int, but a blank value means "not set" (returns None)."""
+    value = value.strip()
+    if not value:
+        return None
+    return require_non_negative_int(value, field_name)
